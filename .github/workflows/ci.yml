@@ -23,7 +23,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y scons libprotobuf-dev protobuf-compiler libcrypto++-dev
+        sudo apt-get install -y scons libprotobuf-dev protobuf-compiler libcrypto++-dev libssl-dev python3-dev
     
     - name: Build
       run: |
@@ -41,11 +41,22 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cppcheck clang-tidy
+        sudo apt-get install -y cppcheck clang-tidy lcov
     
     - name: Run cppcheck
       run: |
-        cppcheck --enable=all --std=c++11 --quiet --suppress=missingIncludeSystem -I. -Iinclude Core Event RPC Protocol Tree Client Storage Server
+        cppcheck --enable=all --std=c++17 --quiet --suppress=missingIncludeSystem -I. -Iinclude Core Event RPC Protocol Tree Client Storage Server
+    
+    - name: Run code coverage
+      run: |
+        scons coverage
+        
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ./coverage
+        fail_ci_if_error: false
+        verbose: true
     
   docker:
     needs: build

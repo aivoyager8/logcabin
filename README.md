@@ -15,10 +15,16 @@ the very first implementation of Raft. It's released under the
 
 - **Raft Consensus Algorithm**: Implements the complete Raft protocol for strong consistency
 - **High Availability**: Provides reliable storage with automatic failover
-- **TLS Support**: Secure communications with TLS encryption (new!)
-- **Prometheus Monitoring**: Built-in metrics for observability (new!)
-- **Docker Support**: Easy deployment with Docker and Docker Compose (new!)
-- **Configurable Installation**: Flexible installation options with custom prefixes (new!)
+- **TLS Support**: Secure communications with TLS encryption
+- **Prometheus Monitoring**: Built-in metrics for observability
+- **Docker Support**: Easy deployment with Docker and Docker Compose
+- **Configurable Installation**: Flexible installation options with custom prefixes
+- **Kubernetes Support**: Complete deployment support for Kubernetes environments (new!)
+- **Web Admin Interface**: Convenient web-based management dashboard (new!)
+- **CMake Build System**: Modern build system alongside traditional SCons (new!)
+- **OpenTelemetry Tracing**: Distributed tracing for better diagnostics (new!)
+- **Advanced Storage Options**: LSM-based storage engine and optimized configurations (new!)
+- **Grafana Dashboards**: Pre-configured monitoring visualization (new!)
 
 ## External Resources
 
