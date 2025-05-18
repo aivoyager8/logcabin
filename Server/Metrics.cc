@@ -24,7 +24,7 @@
 namespace LogCabin {
 namespace Server {
 
-using Core::StringUtil::format;
+// 所有 format 函数调用应使用全限定名称 Core::StringUtil::format
 
 //------------------------------------------------------------------------------
 // Metrics::Metric Implementation
@@ -92,7 +92,12 @@ Metrics::Counter::increment(double value)
         // Prometheus 计数器不能减少
         return;
     }
-    this->value += value;
+    double current = this->value.load();
+    double desired = current + value;
+    // 使用compare_exchange_weak直到成功更新值
+    while (!this->value.compare_exchange_weak(current, desired)) {
+        desired = current + value;
+    }
 }
 
 double
@@ -148,13 +153,23 @@ Metrics::Gauge::set(double value)
 void
 Metrics::Gauge::increment(double value)
 {
-    this->value += value;
+    double current = this->value.load();
+    double desired = current + value;
+    // 使用compare_exchange_weak直到成功更新值
+    while (!this->value.compare_exchange_weak(current, desired)) {
+        desired = current + value;
+    }
 }
 
 void
 Metrics::Gauge::decrement(double value)
 {
-    this->value -= value;
+    double current = this->value.load();
+    double desired = current - value;
+    // 使用compare_exchange_weak直到成功更新值
+    while (!this->value.compare_exchange_weak(current, desired)) {
+        desired = current - value;
+    }
 }
 
 double
@@ -216,11 +231,15 @@ Metrics::Histogram::Histogram(const std::string& name,
 void
 Metrics::Histogram::observe(double value)
 {
-    Core::Mutex::Lock lock(mutex);
+    std::lock_guard<Core::Mutex> lock(mutex);
     
     // 更新总计数和总和
     ++count;
-    sum += value;
+    double current = sum.load();
+    double desired = current + value;
+    while (!sum.compare_exchange_weak(current, desired)) {
+        desired = current + value;
+    }
     
     // 更新适当的桶计数
     for (size_t i = 0; i < buckets.size(); ++i) {
@@ -236,7 +255,7 @@ Metrics::Histogram::observe(double value)
 std::string
 Metrics::Histogram::getValue() const
 {
-    Core::Mutex::Lock lock(mutex);
+    std::lock_guard<Core::Mutex> lock(mutex);
     
     std::ostringstream oss;
     
@@ -260,17 +279,23 @@ Metrics::Histogram::getValue() const
         double threshold = buckets[i];
         uint64_t bucketCount = bucketCounts[i].load();
         
-        std::string labelStr = baseLabelStr.empty() 
-                             ? format("{{le=\"{0:.6g}\"}}", threshold)
-                             : format("{{{0},le=\"{1:.6g}\"}}", baseLabelStr, threshold);
+        std::string labelStr;
+        if (baseLabelStr.empty()) {
+            labelStr = Core::StringUtil::format("{le=\"%.6g\"}", threshold);
+        } else {
+            labelStr = Core::StringUtil::format("{%s,le=\"%.6g\"}", baseLabelStr.c_str(), threshold);
+        }
         
         oss << name << "_bucket" << labelStr << " " << bucketCount << "\n";
     }
     
     // +Inf 桶
-    std::string labelStr = baseLabelStr.empty()
-                         ? "{le=\"+Inf\"}"
-                         : format("{{{0},le=\"+Inf\"}}", baseLabelStr);
+    std::string labelStr;
+    if (baseLabelStr.empty()) {
+        labelStr = "{le=\"+Inf\"}";
+    } else {
+        labelStr = Core::StringUtil::format("{%s,le=\"+Inf\"}", baseLabelStr.c_str());
+    }
     
     oss << name << "_bucket" << labelStr << " " << count.load() << "\n";
     
@@ -331,7 +356,7 @@ Metrics::createHistogram(const std::string& name,
 std::string
 Metrics::getMetricsOutput() const
 {
-    Core::Mutex::Lock lock(mutex);
+    std::lock_guard<Core::Mutex> lock(mutex);
     std::ostringstream oss;
     
     for (const auto& metric : metrics) {
@@ -347,18 +372,19 @@ Metrics::getOrCreateMetric(const std::string& name,
                            const std::map<std::string, std::string>& labels,
                            Args&&... args)
 {
-    Core::Mutex::Lock lock(mutex);
+    std::lock_guard<Core::Mutex> lock(mutex);
     
     // 检查是否已经存在具有相同名称和标签的指标
     for (const auto& metric : metrics) {
         auto typedMetric = std::dynamic_pointer_cast<T>(metric);
-        if (typedMetric && metric->name == name) {
+        if (typedMetric && metric->getName() == name) {
             // 比较标签
             bool labelsMatch = true;
-            if (labels.size() == metric->labels.size()) {
+            const auto& metricLabels = metric->getLabels();
+            if (labels.size() == metricLabels.size()) {
                 for (const auto& labelPair : labels) {
-                    auto it = metric->labels.find(labelPair.first);
-                    if (it == metric->labels.end() || it->second != labelPair.second) {
+                    auto it = metricLabels.find(labelPair.first);
+                    if (it == metricLabels.end() || it->second != labelPair.second) {
                         labelsMatch = false;
                         break;
                     }

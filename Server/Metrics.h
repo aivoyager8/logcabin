@@ -74,6 +74,16 @@ public:
          */
         std::string getOutput() const;
 
+        /**
+         * 获取指标名称
+         */
+        const std::string& getName() const { return name; }
+
+        /**
+         * 获取指标标签
+         */
+        const std::map<std::string, std::string>& getLabels() const { return labels; }
+
     protected:
         // 指标名称
         std::string name;
