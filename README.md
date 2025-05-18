@@ -12,6 +12,7 @@ the very first implementation of Raft. It's released under the
 [ISC license](https://en.wikipedia.org/wiki/ISC_license) (equivalent to BSD).
 
 External resources:
+
 - [Slide deck](https://logcabin.github.io/talk/)
   on LogCabin's usage, operations, and internals
 - [Code-level documentation](https://logcabin.github.io/doxygen/annotated.html)
@@ -52,6 +53,7 @@ Pre-requisites:
 - protobuf (v2.6.x suggested, v2.5.x should work, v2.3.x is not supported)
 - crypto++ (v5.6.1 is known to work)
 - doxygen (optional; v1.8.8 is known to work)
+- python (v2.7 and v3.10 for the test scripts and the plots correspondingly)
 
 In short, RHEL/CentOS 6 should work, as well as anything more recent.
 
@@ -60,7 +62,6 @@ Get the source code:
     git clone git://github.com/logcabin/logcabin.git
     cd logcabin
     git submodule update --init
-
 
 Build the client library, server binary, and unit tests:
 
@@ -98,9 +99,9 @@ Running a real cluster
 This section shows you how to run the `HelloWorld` example program against a
 three-server LogCabin cluster. We'll run all the servers on localhost for now:
 
- - Server 1 will listen on 127.0.0.1:5254
- - Server 2 will listen on 127.0.0.1:5255
- - Server 3 will listen on 127.0.0.1:5256
+- Server 1 will listen on 127.0.0.1:5254
+- Server 2 will listen on 127.0.0.1:5255
+- Server 3 will listen on 127.0.0.1:5256
 
 Port 5254 is LogCabin's default port and is reserved by IANA for LogCabin. The
 other two belong to others and are hopefully not in use on your network.
