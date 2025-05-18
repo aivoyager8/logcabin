@@ -994,7 +994,7 @@ class RaftConsensus {
     /**
      * Destructor.
      */
-    ~RaftConsensus();
+    virtual ~RaftConsensus();
 
     /// Initialize. Must be called before any other method.
     void init();

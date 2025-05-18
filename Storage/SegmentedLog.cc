@@ -628,7 +628,7 @@ SegmentedLog::takeSync()
             new SegmentedLog::Sync(getLastLogIndex(),
                                    diskWriteDurationThreshold));
     std::swap(other, currentSync);
-    return std::move(other);
+    return other;
 }
 
 void

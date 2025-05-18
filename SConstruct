@@ -297,7 +297,8 @@ except OSError:
 
 ### scons install target
 
-env.InstallAs('/etc/init.d/logcabin',           'scripts/logcabin-init-redhat')
+# 移除不存在的 install 目标，防止构建失败
+# env.InstallAs('/etc/init.d/logcabin',           'scripts/logcabin-init-redhat')
 env.InstallAs('/usr/bin/logcabinctl',           'build/Client/ServerControl')
 env.InstallAs('/usr/bin/logcabind',             'build/LogCabin')
 env.InstallAs('/usr/bin/logcabin',              'build/Examples/TreeOps')
@@ -406,23 +407,27 @@ def rename(env, target, source):
     for (t, s) in zip(target, source):
         os.rename(str(s), str(t))
 
-# Rename files used to build .rpm files
+# Remove files used to build .rpm files
+# (自动移除未使用的源文件)
 def remove_sources(env, target, source):
     garbage = set()
     for s in source:
-        garbage.update(s.sources)
-        for s2 in s.sources:
-            garbage.update(s2.sources)
+        garbage.update(getattr(s, 'sources', []))
+        for s2 in getattr(s, 'sources', []):
+            garbage.update(getattr(s2, 'sources', []))
     for g in list(garbage):
         if str(g).endswith('.spec'):
-            garbage.update(g.sources)
+            garbage.update(getattr(g, 'sources', []))
     for g in garbage:
         if env['VERBOSE'] == '1':
             print('rm %s' % g)
         try:
             os.remove(str(g))
         except OSError:
-            os.rmdir(str(g))
+            try:
+                os.rmdir(str(g))
+            except OSError:
+                pass
 
 # Rename PACKAGEROOT directory and subdirectories (should be empty)
 def remove_packageroot(env, target, source):
