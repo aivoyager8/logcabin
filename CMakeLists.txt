@@ -58,10 +58,10 @@ add_subdirectory(Core)
 add_subdirectory(Event)
 add_subdirectory(RPC)
 add_subdirectory(Protocol)
+add_subdirectory(Server) # Ensure Server is processed before Storage if Storage depends on Server's generated files
 add_subdirectory(Tree)
 add_subdirectory(Client)
 add_subdirectory(Storage)
-add_subdirectory(Server)
 add_subdirectory(Examples)
 
 if(LOGCABIN_BUILD_TESTS)

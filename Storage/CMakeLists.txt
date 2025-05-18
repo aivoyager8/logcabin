@@ -61,6 +61,7 @@ endif()
 # 创建Storage库
 add_library(Storage STATIC 
     ${STORAGE_SOURCES}
+    ${STORAGE_PROTO_HDRS} # Add generated headers to the library sources
 )
 
 # 包含生成的头文件目录
@@ -68,6 +69,7 @@ target_include_directories(Storage PUBLIC
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_BINARY_DIR}/Protocol
     ${CMAKE_BINARY_DIR}/Server  # 添加Server目录以访问SnapshotMetadata.pb.h等文件
+    ${CMAKE_SOURCE_DIR} # 添加源码根目录，以便可以通过 "Server/SnapshotMetadata.pb.h" 包含
 )
 
 target_link_libraries(Storage
@@ -80,9 +82,15 @@ target_link_libraries(Storage
 
 # 存储工具可执行文件
 add_executable(StorageTool Tool.cc)
+target_include_directories(StorageTool PUBLIC
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_BINARY_DIR}/Server
+    ${CMAKE_SOURCE_DIR} # 添加源码根目录，以便可以通过 "Server/SnapshotMetadata.pb.h" 包含
+)
 target_link_libraries(StorageTool 
     Storage 
     Core
+    Protocol # Added Protocol library
     ${PROTOBUF_LIBRARIES}
     ${CRYPTOPP_LIBRARIES}
     zstd
@@ -101,7 +109,12 @@ if(LOGCABIN_BUILD_TESTS)
     foreach(test_file ${STORAGE_TEST_SOURCES})
         get_filename_component(test_name ${test_file} NAME_WE)
         add_executable(${test_name} ${test_file})
-        target_link_libraries(${test_name} Storage Core gtest gtest_main)
+        target_include_directories(${test_name} PRIVATE
+            ${CMAKE_CURRENT_BINARY_DIR}
+            ${CMAKE_BINARY_DIR}/Server
+            ${CMAKE_SOURCE_DIR} # 添加源码根目录，以便可以通过 "Server/SnapshotMetadata.pb.h" 包含
+        )
+        target_link_libraries(${test_name} Storage Core Protocol gtest gtest_main pthread)
         add_test(NAME ${test_name} COMMAND ${test_name})
     endforeach()
 endif()
