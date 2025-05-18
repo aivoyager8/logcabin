@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>    // 添加thread头文件
 #include <vector>
 #include <functional>
 
@@ -13,6 +14,7 @@
 #include "Core/ConditionVariable.h"
 #include "Core/Mutex.h"
 #include "Storage/Log.h"
+#include "Storage/bloom_filter.hpp"
 
 namespace LogCabin {
 namespace Storage {
@@ -31,7 +33,7 @@ class LSMStorage : public Log {
      * @param path 存储路径
      * @param config 存储配置对象
      */
-    LSMStorage(const std::string& path, const Config& config);
+    LSMStorage(const std::string& path, const std::map<std::string, std::string>& config);
     
     /**
      * 析构函数。
@@ -42,12 +44,12 @@ class LSMStorage : public Log {
     /**
      * 附加一个条目到日志中。参见Log::append接口。
      */
-    virtual Result append(const Entry& entry);
+    virtual std::pair<uint64_t, uint64_t> append(const std::vector<const Entry*>& entries);
     
     /**
      * 读取指定位置的条目。参见Log::getEntry接口。
      */
-    virtual Result getEntry(uint64_t logIndex, Entry& entry) const;
+    virtual const Entry& getEntry(uint64_t index) const;
     
     /**
      * 获取最后一个条目的索引。参见Log::getLastLogIndex接口。
@@ -55,24 +57,44 @@ class LSMStorage : public Log {
     virtual uint64_t getLastLogIndex() const;
     
     /**
-     * 获取元数据。参见Log::getMetadata接口。
+     * 获取日志起始索引
      */
-    virtual Result getMetadata(Metadata& metadata) const;
+    virtual uint64_t getLogStartIndex() const;
     
     /**
-     * 更新元数据。参见Log::updateMetadata接口。
+     * 获取名称
      */
-    virtual Result updateMetadata(const Metadata& metadata);
+    virtual std::string getName() const;
     
     /**
-     * 在指定位置截断日志。参见Log::truncate接口。
+     * 获取大小（字节）
      */
-    virtual Result truncate(uint64_t logIndex);
+    virtual uint64_t getSizeBytes() const;
+    
+    /**
+     * 获取同步对象
+     */
+    virtual std::unique_ptr<Sync> takeSync();
+    
+    /**
+     * 从头部截断日志
+     */
+    virtual void truncatePrefix(uint64_t firstIndex);
+    
+    /**
+     * 从尾部截断日志
+     */
+    virtual void truncateSuffix(uint64_t lastIndex);
+    
+    /**
+     * 更新元数据
+     */
+    virtual void updateMetadata();
     
     /**
      * 强制刷盘，将内存表数据立即写入磁盘。
      */
-    Result flush();
+    void flush();
     
     /**
      * 关闭后台合并线程，仅用于测试或特殊场景。
@@ -88,7 +110,18 @@ class LSMStorage : public Log {
     /**
      * 布隆过滤器类型声明（具体实现可用第三方库，如libbloom/boost等）
      */
-    struct BloomFilter;
+    struct BloomFilter {
+        bloom_filter filter;
+        BloomFilter(size_t expected_entries, double fp_rate) {
+            bloom_parameters params;
+            params.projected_element_count = expected_entries;
+            params.false_positive_probability = fp_rate;
+            params.compute_optimal_parameters();
+            filter = bloom_filter(params);
+        }
+        void add(uint64_t key) { filter.insert(reinterpret_cast<const unsigned char*>(&key), sizeof(key)); }
+        bool possiblyContains(uint64_t key) const { return filter.contains(reinterpret_cast<const unsigned char*>(&key), sizeof(key)); }
+    };
     using BloomFilterPtr = std::shared_ptr<BloomFilter>;
 
     /**
@@ -104,27 +137,27 @@ class LSMStorage : public Log {
     /**
      * 将内存中的数据刷新到磁盘。
      */
-    Result flushMemTable();
+    bool flushMemTable();
     
     /**
      * 合并两个层级。
      */
-    Result mergeLevels(size_t level_index);
+    bool mergeLevels(size_t level_index);
     
     /**
      * 从磁盘加载现有数据。
      */
-    Result loadFromDisk();
+    bool loadFromDisk();
     
     /**
      * 写入磁盘操作。
      */
-    Result writeToDisk(const Level& level, size_t level_index);
+    bool writeToDisk(const Level& level, size_t level_index);
     
     /**
      * 从磁盘读取指定层级。
      */
-    Result readFromDisk(Level& level, size_t level_index);
+    bool readFromDisk(Level& level, size_t level_index);
     
     /**
      * 获取层级文件路径。
@@ -135,7 +168,7 @@ class LSMStorage : public Log {
     const std::string path;
     
     // 配置信息
-    const Config config;
+    const std::map<std::string, std::string> config;
     
     // 内存表，尚未写入磁盘的数据
     Level memTable;
@@ -146,8 +179,8 @@ class LSMStorage : public Log {
     // 最后一个日志索引
     std::atomic<uint64_t> lastLogIndex;
     
-    // 元数据缓存
-    mutable Metadata cachedMetadata;
+    // 日志开始索引
+    std::atomic<uint64_t> logStartIndex;
     
     // 用于保护内存表的互斥锁
     mutable Core::Mutex mutex;

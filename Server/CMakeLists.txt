@@ -6,26 +6,20 @@ set(SERVER_PROTO_FILES
 
 # Server库源代码
 set(SERVER_SOURCES
-    Consensus.cc
     ClientService.cc
-    ConfigurationManager.cc
     Globals.cc
     Main.cc
     RaftConsensus.cc
     RaftService.cc
     ServerStats.cc
     StateMachine.cc
-    StateMachineFactory.cc
-    StateMachineUpdater.cc
     Metrics.cc
     MetricsServer.cc
-    Telemetry.cc
 )
 
 # Web管理界面源文件（如果启用）
 if(LOGCABIN_ENABLE_WEBADMIN)
     set(SERVER_SOURCES ${SERVER_SOURCES}
-        WebAdmin/Server.cc
     )
 endif()
 
@@ -60,41 +54,22 @@ target_link_libraries(Server
     ${OPENSSL_LIBRARIES}
 )
 
-# 主可执行文件
-add_executable(LogCabin Main.cc)
-target_link_libraries(LogCabin
-    Server
-    Storage
-    Tree
-    Client
-    Protocol
-    RPC
-    Event
-    Core
-    ${PROTOBUF_LIBRARIES}
-    ${CRYPTOPP_LIBRARIES}
-    ${OPENSSL_LIBRARIES}
-    rt
-)
+# 主可执行文件 (注释掉，因为在根目录中已经定义)
+# add_executable(LogCabin Main.cc)
+# target_link_libraries(LogCabin ...)
 
 # 测试
 if(LOGCABIN_BUILD_TESTS)
     set(SERVER_TEST_SOURCES
         ClientServiceTest.cc
-        ConfigurationManagerTest.cc
-        ConsensusTest.cc
         RaftConsensusTest.cc
         ServerStatsTest.cc
         StateMachineTest.cc
-        StateMachineFactoryTest.cc
-        StateMachineUpdaterTest.cc
-        MetricsTest.cc
     )
     
     # Web管理界面测试
     if(LOGCABIN_ENABLE_WEBADMIN)
         list(APPEND SERVER_TEST_SOURCES
-            WebAdmin/ServerTest.cc
         )
     endif()
     

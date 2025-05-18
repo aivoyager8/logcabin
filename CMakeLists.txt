@@ -32,7 +32,7 @@ option(LOGCABIN_ENABLE_METRICS "启用Prometheus指标" ON)
 # 查找依赖库
 find_package(Threads REQUIRED)
 find_package(Protobuf REQUIRED)
-find_package(CryptoPP REQUIRED)
+find_library(CRYPTOPP_LIBRARIES cryptopp REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 # 编译选项
@@ -99,15 +99,28 @@ install(PROGRAMS
     RENAME logcabinctl
 )
 
+# 安装示例工具（修复语法）
 install(PROGRAMS
     ${CMAKE_BINARY_DIR}/Examples/TreeOps
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(PROGRAMS
     ${CMAKE_BINARY_DIR}/Examples/Benchmark
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RENAME logcabin-benchmark
+)
+install(PROGRAMS
     ${CMAKE_BINARY_DIR}/Examples/Reconfigure
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RENAME logcabin-reconfigure
+)
+install(PROGRAMS
     ${CMAKE_BINARY_DIR}/Examples/SmokeTest
     DESTINATION ${CMAKE_INSTALL_BINDIR}
-    RENAME logcabin logcabin-benchmark logcabin-reconfigure logcabin-smoketest
+    RENAME logcabin-smoketest
 )
 
+# 安装存储工具
 install(PROGRAMS
     ${CMAKE_BINARY_DIR}/Storage/Tool
     DESTINATION ${CMAKE_INSTALL_BINDIR}
