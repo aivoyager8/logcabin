@@ -1,8 +1,36 @@
 # Proto文件
 set(SERVER_PROTO_FILES
-    SnapshotMetadata.proto
-    SnapshotStateMachine.proto
+    "${CMAKE_CURRENT_SOURCE_DIR}/SnapshotMetadata.proto"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SnapshotStateMachine.proto"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SnapshotStats.proto"
 )
+
+# 手动创建 protobuf 生成命令，以便添加 import 路径
+set(SERVER_PROTO_SRCS "")
+set(SERVER_PROTO_HDRS "")
+foreach(proto ${SERVER_PROTO_FILES})
+    get_filename_component(BASENAME ${proto} NAME_WE)
+    set(PROTO_SRC "${CMAKE_CURRENT_BINARY_DIR}/${BASENAME}.pb.cc")
+    set(PROTO_HDR "${CMAKE_CURRENT_BINARY_DIR}/${BASENAME}.pb.h")
+    
+    add_custom_command(
+        OUTPUT ${PROTO_SRC} ${PROTO_HDR}
+        COMMAND ${PROTOBUF_PROTOC_EXECUTABLE}
+        ARGS --cpp_out=${CMAKE_CURRENT_BINARY_DIR}
+             -I${CMAKE_CURRENT_SOURCE_DIR}
+             -I${CMAKE_SOURCE_DIR}/Protocol
+             -I${CMAKE_BINARY_DIR}/Protocol
+             ${proto}
+        DEPENDS ${proto}
+        COMMENT "Running C++ protocol buffer compiler on ${proto}"
+        VERBATIM
+    )
+    list(APPEND SERVER_PROTO_SRCS ${PROTO_SRC})
+    list(APPEND SERVER_PROTO_HDRS ${PROTO_HDR})
+endforeach()
+
+# 确保生成的文件被视为源文件
+set_source_files_properties(${SERVER_PROTO_SRCS} ${SERVER_PROTO_HDRS} PROPERTIES GENERATED TRUE)
 
 # Server库源代码
 set(SERVER_SOURCES
@@ -15,6 +43,7 @@ set(SERVER_SOURCES
     StateMachine.cc
     Metrics.cc
     MetricsServer.cc
+    ${SERVER_PROTO_SRCS}
 )
 
 # Web管理界面源文件（如果启用）
@@ -23,13 +52,14 @@ if(LOGCABIN_ENABLE_WEBADMIN)
     )
 endif()
 
-# 生成协议文件
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${SERVER_PROTO_FILES})
-
 # 创建Server库
 add_library(Server STATIC 
     ${SERVER_SOURCES}
-    ${PROTO_SRCS}
+)
+
+# 包含目录
+target_include_directories(Server PUBLIC
+    ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 # 编译选项
