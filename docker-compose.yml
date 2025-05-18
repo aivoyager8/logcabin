@@ -1,0 +1,54 @@
+version: '3'
+
+services:
+  # 单节点 LogCabin 服务
+  logcabin:
+    build: .
+    ports:
+      - "5254:5254"
+    volumes:
+      - ./config:/etc/logcabin
+      - logcabin_data:/var/lib/logcabin
+      - logcabin_logs:/var/log/logcabin
+    command: ["--config", "/etc/logcabin/logcabin.conf"]
+
+  # 三节点集群配置
+  logcabin1:
+    build: .
+    ports:
+      - "5254:5254"
+    volumes:
+      - ./config/node1:/etc/logcabin
+      - logcabin1_data:/var/lib/logcabin
+      - logcabin1_logs:/var/log/logcabin
+    command: ["--config", "/etc/logcabin/logcabin.conf"]
+
+  logcabin2:
+    build: .
+    ports:
+      - "5255:5254"
+    volumes:
+      - ./config/node2:/etc/logcabin
+      - logcabin2_data:/var/lib/logcabin
+      - logcabin2_logs:/var/log/logcabin
+    command: ["--config", "/etc/logcabin/logcabin.conf"]
+
+  logcabin3:
+    build: .
+    ports:
+      - "5256:5254"
+    volumes:
+      - ./config/node3:/etc/logcabin
+      - logcabin3_data:/var/lib/logcabin
+      - logcabin3_logs:/var/log/logcabin
+    command: ["--config", "/etc/logcabin/logcabin.conf"]
+
+volumes:
+  logcabin_data:
+  logcabin_logs:
+  logcabin1_data:
+  logcabin1_logs:
+  logcabin2_data:
+  logcabin2_logs:
+  logcabin3_data:
+  logcabin3_logs:

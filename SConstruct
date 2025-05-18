@@ -34,6 +34,11 @@ _VERSION = '1.2.0-alpha.0'
 _RPM_VERSION = '1.2.0'
 _RPM_RELEASE = '0.1.alpha.0'
 
+# 安装路径前缀，默认为 /usr
+_PREFIX = '/usr'
+_SYSCONFDIR = '/etc'
+_LOCALSTATEDIR = '/var'
+
 opts = Variables('Local.sc')
 
 opts.AddVariables(
@@ -58,6 +63,9 @@ opts.AddVariables(
     ("VERSION", "Override version string", _VERSION),
     ("RPM_VERSION", "Override version number for rpm", _RPM_VERSION),
     ("RPM_RELEASE", "Override release string for rpm", _RPM_RELEASE),
+    ("PREFIX", "Installation prefix directory", _PREFIX),
+    ("SYSCONFDIR", "System configuration directory", _SYSCONFDIR),
+    ("LOCALSTATEDIR", "Local state directory", _LOCALSTATEDIR),
 )
 
 env = Environment(options = opts,
@@ -100,11 +108,24 @@ if env['CXX_FAMILY'].lower() == 'auto':
         print('Could not detect compiler: %s' % e)
         pass
 
-CXX_STANDARD = 'c++11'
+# 检测并使用支持的最高 C++ 标准
+CXX_STANDARD = 'c++17'  # 默认尝试 C++17
 
-if (env['CXX_FAMILY'] == 'gcc' and
-    Version(env['CXX_VERSION']) < Version('4.7')):
-    CXX_STANDARD = 'c++0x'
+# 根据编译器版本回退到适当的标准
+if env['CXX_FAMILY'] == 'gcc':
+    if Version(env['CXX_VERSION']) < Version('7.0'):
+        CXX_STANDARD = 'c++14'
+    if Version(env['CXX_VERSION']) < Version('5.0'):
+        CXX_STANDARD = 'c++11'
+    if Version(env['CXX_VERSION']) < Version('4.7'):
+        CXX_STANDARD = 'c++0x'
+elif env['CXX_FAMILY'] == 'clang':
+    if Version(env['CXX_VERSION']) < Version('5.0'):
+        CXX_STANDARD = 'c++14'
+    if Version(env['CXX_VERSION']) < Version('3.4'):
+        CXX_STANDARD = 'c++11'
+
+print('Using C++ standard: %s' % CXX_STANDARD)
 
 if env['CXX_FAMILY'] == 'gcc':
     env.Prepend(CXXFLAGS = [
@@ -181,7 +202,18 @@ env.Prepend(GTESTCXXFLAGS = [
 if env["BUILDTYPE"] == "DEBUG":
     env.Append(CPPFLAGS = [ "-g", "-DDEBUG" ])
 elif env["BUILDTYPE"] == "RELEASE":
-    env.Append(CPPFLAGS = [ "-DNDEBUG", "-O2" ])
+    # 增强 Release 构建的优化选项
+    env.Append(CPPFLAGS = [ 
+        "-DNDEBUG", 
+        "-O3",                 # 更激进的优化
+        "-flto",               # 链接时优化
+        "-march=native",       # 针对本机架构优化
+        "-ffunction-sections", # 每个函数放在单独的段中
+        "-fdata-sections"      # 每个数据项放在单独的段中
+    ])
+    env.Append(LINKFLAGS = [
+        "-Wl,--gc-sections"    # 去除未使用的段
+    ])
 else:
     print("Error BUILDTYPE must be RELEASE or DEBUG")
     sys.exit(-1)
@@ -254,6 +286,25 @@ PhonyTargets(doc = "doxygen docs/Doxyfile")
 PhonyTargets(docs = "doxygen docs/Doxyfile")
 PhonyTargets(tags = "ctags -R --exclude=build --exclude=docs .")
 
+# 添加代码覆盖率目标
+coverage_env = env.Clone()
+coverage_env.Append(CXXFLAGS = ["-fprofile-arcs", "-ftest-coverage"])
+coverage_env.Append(LIBS = ["gcov"])
+PhonyTargets(coverage = "mkdir -p coverage && " + 
+             "CXXFLAGS='-fprofile-arcs -ftest-coverage' " +
+             "LINKFLAGS='-fprofile-arcs -ftest-coverage' " +
+             "scons -Q test && " +
+             "lcov --directory . --capture --output-file coverage/coverage.info && " +
+             "genhtml coverage/coverage.info --output-directory coverage/html")
+
+# 添加静态分析目标
+PhonyTargets(static_analysis = "cppcheck --enable=all --std=" + CXX_STANDARD + 
+             " --quiet --suppress=missingIncludeSystem -I. -Iinclude Core Event RPC Protocol Tree Client Storage Server")
+
+# 添加 clang-tidy 目标
+PhonyTargets(clang_tidy = "find Core Event RPC Protocol Tree Client Storage Server -name '*.cc' | " +
+             "xargs -I{} clang-tidy {} -- -I. -Iinclude -std=" + CXX_STANDARD)
+
 clientlib = env.StaticLibrary("build/logcabin",
                   (object_files['Client'] +
                    object_files['Tree'] +
@@ -273,7 +324,7 @@ daemon = env.Program("build/LogCabin",
              object_files['RPC'] +
              object_files['Event'] +
              object_files['Core']),
-            LIBS = [ "pthread", "protobuf", "rt", "cryptopp" ])
+            LIBS = [ "pthread", "protobuf", "rt", "cryptopp", "ssl", "crypto" ])
 env.Default(daemon)
 
 storageTool = env.Program("build/Storage/Tool",
@@ -297,17 +348,32 @@ except OSError:
 
 ### scons install target
 
-# 移除不存在的 install 目标，防止构建失败
-# env.InstallAs('/etc/init.d/logcabin',           'scripts/logcabin-init-redhat')
-env.InstallAs('/usr/bin/logcabinctl',           'build/Client/ServerControl')
-env.InstallAs('/usr/bin/logcabind',             'build/LogCabin')
-env.InstallAs('/usr/bin/logcabin',              'build/Examples/TreeOps')
-env.InstallAs('/usr/bin/logcabin-benchmark',    'build/Examples/Benchmark')
-env.InstallAs('/usr/bin/logcabin-reconfigure',  'build/Examples/Reconfigure')
-env.InstallAs('/usr/bin/logcabin-smoketest',    'build/Examples/SmokeTest')
-env.InstallAs('/usr/bin/logcabin-storage',      'build/Storage/Tool')
-env.InstallAs('/var/log/logcabin',              'build/emptydir')
-env.Alias('install', ['/etc', '/usr', '/var'])
+# 使用配置的安装路径
+prefix = env['PREFIX']
+sysconfdir = env['SYSCONFDIR']
+localstatedir = env['LOCALSTATEDIR']
+
+# 构建安装目标列表
+install_targets = []
+
+# 二进制文件安装
+bin_dir = os.path.join(prefix, 'bin')
+env.InstallAs(os.path.join(bin_dir, 'logcabinctl'),        'build/Client/ServerControl')
+env.InstallAs(os.path.join(bin_dir, 'logcabind'),          'build/LogCabin')
+env.InstallAs(os.path.join(bin_dir, 'logcabin'),           'build/Examples/TreeOps')
+env.InstallAs(os.path.join(bin_dir, 'logcabin-benchmark'), 'build/Examples/Benchmark')
+env.InstallAs(os.path.join(bin_dir, 'logcabin-reconfigure'),'build/Examples/Reconfigure')
+env.InstallAs(os.path.join(bin_dir, 'logcabin-smoketest'), 'build/Examples/SmokeTest')
+env.InstallAs(os.path.join(bin_dir, 'logcabin-storage'),   'build/Storage/Tool')
+install_targets.append(bin_dir)
+
+# 日志目录
+log_dir = os.path.join(localstatedir, 'log/logcabin')
+env.InstallAs(log_dir, 'build/emptydir')
+install_targets.append(log_dir)
+
+# 创建安装别名
+env.Alias('install', install_targets)
 
 
 #### 'scons rpm' target

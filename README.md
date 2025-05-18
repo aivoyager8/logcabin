@@ -11,18 +11,83 @@ management issues. LogCabin uses the
 the very first implementation of Raft. It's released under the
 [ISC license](https://en.wikipedia.org/wiki/ISC_license) (equivalent to BSD).
 
-External resources:
+## Key Features
+
+- **Raft Consensus Algorithm**: Implements the complete Raft protocol for strong consistency
+- **High Availability**: Provides reliable storage with automatic failover
+- **TLS Support**: Secure communications with TLS encryption (new!)
+- **Prometheus Monitoring**: Built-in metrics for observability (new!)
+- **Docker Support**: Easy deployment with Docker and Docker Compose (new!)
+- **Configurable Installation**: Flexible installation options with custom prefixes (new!)
+
+## External Resources
 
 - [Slide deck](https://logcabin.github.io/talk/)
   on LogCabin's usage, operations, and internals
 - [Code-level documentation](https://logcabin.github.io/doxygen/annotated.html)
   built with Doxygen
+- [Installation guide](INSTALL.md) for detailed setup instructions (new!)
 - Recent updates on LogCabin's development on
   [Diego's blog](http://ongardie.net/blog/+logcabin/)
 
 Information about releases is in [RELEASES.md](RELEASES.md).
 
-This README will walk you through how to compile and run LogCabin.
+## Quick Start
+
+### Using Docker
+
+```bash
+# Run a single node
+docker run -d -p 5254:5254 -p 9090:9090 logcabin
+
+# Run a cluster using Docker Compose
+docker-compose up -d
+```
+
+### Building from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/logcabin/logcabin.git
+cd logcabin
+
+# Build with default settings
+scons
+
+# Install with custom prefix
+sudo scons install PREFIX=/opt/logcabin
+```
+
+For detailed installation instructions, see [INSTALL.md](INSTALL.md).
+
+## Monitoring
+
+LogCabin now includes Prometheus metrics for monitoring. Access metrics at:
+
+```
+http://your-server:9090/metrics
+```
+
+Configure the metrics server in your configuration file:
+
+```
+# Enable Prometheus metrics
+metricsEnabled = true
+metricsListenAddress = 0.0.0.0
+metricsPort = 9090
+```
+
+## Security
+
+LogCabin now supports TLS encryption for secure communication:
+
+```
+# Enable TLS
+tlsEnabled = true
+tlsCertFile = /path/to/cert.pem
+tlsKeyFile = /path/to/key.pem
+tlsCaFile = /path/to/ca.pem
+```
 
 Questions
 =========
