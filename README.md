@@ -23,7 +23,7 @@ the very first implementation of Raft. It's released under the
 - **Web Admin Interface**: Convenient web-based management dashboard (new!)
 - **CMake Build System**: Modern build system alongside traditional SCons (new!)
 - **OpenTelemetry Tracing**: Distributed tracing for better diagnostics (new!)
-- **Advanced Storage Options**: LSM-based storage engine and optimized configurations (new!)
+- **Advanced Storage Options**: LSM-based storage engine (high write throughput, background compaction, compression support, bloom filter, configurable flush/compaction) and optimized configurations (new!)
 - **Grafana Dashboards**: Pre-configured monitoring visualization (new!)
 
 ## External Resources
@@ -93,6 +93,19 @@ tlsEnabled = true
 tlsCertFile = /path/to/cert.pem
 tlsKeyFile = /path/to/key.pem
 tlsCaFile = /path/to/ca.pem
+```
+
+## LSM 存储引擎快速配置
+
+在 `config/storage.conf` 中启用 LSM：
+
+```
+storageModule = LSM
+lsmBufferSizeMB = 64
+lsmCompressionEnabled = true
+lsmCompressionAlgorithm = zstd
+lsmMaxLevels = 7
+lsmBloomFilterFPRate = 0.01
 ```
 
 Questions

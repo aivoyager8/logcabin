@@ -56,6 +56,12 @@ LSMStorage::LSMStorage(const std::string& path, const Config& config)
     , compactThread()
     , running(true)
     , initialized(false)
+    // 新增成员初始化
+    , flushIntervalSec(0)
+    , disableCompactionFlag(false)
+    , compressionAlgorithm("zstd")
+    , bloomFilterFPRate(0.01)
+    , globalBloom(nullptr)
 {
     // 创建存储目录（如果不存在）
     mkdir(path.c_str(), 0755);
@@ -64,11 +70,22 @@ LSMStorage::LSMStorage(const std::string& path, const Config& config)
     memTable.min_index = std::numeric_limits<uint64_t>::max();
     memTable.max_index = 0;
     
+    // 解析新配置
+    if (config.count("lsmFlushIntervalSec"))
+        flushIntervalSec = std::stoul(config.at("lsmFlushIntervalSec"));
+    if (config.count("lsmDisableCompaction"))
+        disableCompactionFlag = (config.at("lsmDisableCompaction") == "true");
+    if (config.count("lsmCompressionAlgorithm"))
+        compressionAlgorithm = config.at("lsmCompressionAlgorithm");
+    if (config.count("lsmBloomFilterFPRate"))
+        bloomFilterFPRate = std::stod(config.at("lsmBloomFilterFPRate"));
+
     // 加载磁盘数据
     loadFromDisk();
     
     // 启动后台合并线程
-    compactThread.reset(new std::thread(&LSMStorage::compact, this));
+    if (!disableCompactionFlag)
+        compactThread.reset(new std::thread(&LSMStorage::compact, this));
 }
 
 LSMStorage::~LSMStorage() 
@@ -78,10 +95,26 @@ LSMStorage::~LSMStorage()
     if (compactThread && compactThread->joinable()) {
         compactThread->join();
     }
-    
-    // 刷新所有内存数据到磁盘
-    if (!memTable.entries.empty()) {
-        flushMemTable();
+    flush();
+}
+
+// 新增：外部可调用的强制刷盘方法
+Log::Result
+LSMStorage::flush()
+{
+    Log::Result res = flushMemTable();
+    compactCond.notify_one();
+    return res;
+}
+
+// 新增：关闭后台合并线程（仅测试或特殊场景使用）
+void
+LSMStorage::disableCompaction()
+{
+    running.store(false);
+    compactCond.notify_all();
+    if (compactThread && compactThread->joinable()) {
+        compactThread->join();
     }
 }
 
@@ -100,7 +133,10 @@ LSMStorage::append(const Log::Entry& entry)
     
     memTable.entries[entry.index] = std::move(buffer);
     memTable.max_index = std::max(memTable.max_index, entry.index);
-    
+
+    // TODO: 更新memTable布隆过滤器
+    // if (memTable.bloom) memTable.bloom->add(entry.index);
+
     // 更新最后日志索引
     lastLogIndex.store(memTable.max_index);
     
@@ -116,7 +152,6 @@ LSMStorage::append(const Log::Entry& entry)
         flushMemTable();
         compactCond.notify_one();
     }
-    
     return Log::Result::SUCCESS;
 }
 
@@ -236,10 +271,7 @@ LSMStorage::compact()
             compactCond.wait(lock, [this] {
                 return !running.load() || !memTable.entries.empty();
             });
-            
-            if (!running.load()) {
-                break;
-            }
+            if (!running.load()) break;
         }
         
         // 尝试合并层级
@@ -252,8 +284,12 @@ LSMStorage::compact()
             }
         }
         
+        // 支持定时自动刷盘
+        if (flushIntervalSec > 0) {
+            flush();
+        }
         // 休眠，避免过度合并
-        std::this_thread::sleep_for(std::chrono::seconds(10));
+        std::this_thread::sleep_for(std::chrono::seconds(flushIntervalSec > 0 ? flushIntervalSec : 10));
     }
 }
 
@@ -261,22 +297,22 @@ Log::Result
 LSMStorage::flushMemTable()
 {
     Level newLevel;
-    
     {
         Core::Mutex::Lock lock(mutex);
         if (memTable.entries.empty()) {
             return Log::Result::SUCCESS;
         }
-        
         // 交换内存表到新层
         newLevel = std::move(memTable);
-        
+        // 初始化布隆过滤器（预留，实际实现需引入库）
+        // newLevel.bloom = std::make_shared<BloomFilter>(bloomFilterFPRate, newLevel.entries.size());
+        // for (const auto& e : newLevel.entries) newLevel.bloom->add(e.first);
+
         // 重置内存表
         memTable.entries.clear();
         memTable.min_index = std::numeric_limits<uint64_t>::max();
         memTable.max_index = 0;
     }
-    
     // 插入到磁盘层级的最顶层
     if (diskLevels.empty()) {
         diskLevels.push_back(std::move(newLevel));
@@ -294,15 +330,16 @@ LSMStorage::mergeLevels(size_t level_index)
     if (level_index >= diskLevels.size() || level_index + 1 >= diskLevels.size()) {
         return Log::Result::INVALID_ARGUMENT;
     }
-    
     Level& upperLevel = diskLevels[level_index];
     Level& lowerLevel = diskLevels[level_index + 1];
-    
-    // 将上层数据合并到下层
+
+    // 优化：只合并不存在于下层的 key，减少无谓覆盖
     for (const auto& entry : upperLevel.entries) {
-        lowerLevel.entries[entry.first] = entry.second;
+        if (lowerLevel.entries.find(entry.first) == lowerLevel.entries.end()) {
+            lowerLevel.entries[entry.first] = entry.second;
+            // if (lowerLevel.bloom) lowerLevel.bloom->add(entry.first);
+        }
     }
-    
     // 更新合并后的层级范围
     lowerLevel.min_index = std::min(lowerLevel.min_index, upperLevel.min_index);
     lowerLevel.max_index = std::max(lowerLevel.max_index, upperLevel.max_index);
