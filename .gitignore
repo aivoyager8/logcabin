@@ -13,3 +13,4 @@
 /.vscode
 /scripts/plot/csv
 /scripts/plot/figures
+/cmake_build
